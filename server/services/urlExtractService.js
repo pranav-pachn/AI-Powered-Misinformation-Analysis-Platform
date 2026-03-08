@@ -1,6 +1,5 @@
 import dns from 'dns/promises';
 import { URL } from 'url';
-import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
 
 const MAX_HTML_BYTES = 4 * 1024 * 1024; // 4 MB
@@ -92,7 +91,6 @@ export async function fetchHtml(urlString) {
   try {
     const response = await fetch(urlString, {
       redirect: 'follow',
-      size: MAX_HTML_BYTES,
       signal: controller.signal,
       headers: {
         'User-Agent':
@@ -109,6 +107,13 @@ export async function fetchHtml(urlString) {
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/html')) {
       const error = new Error('The provided URL does not appear to be an HTML page.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const contentLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > MAX_HTML_BYTES) {
+      const error = new Error('The provided URL content is too large to analyze.');
       error.statusCode = 400;
       throw error;
     }

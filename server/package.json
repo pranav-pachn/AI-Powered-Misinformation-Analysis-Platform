@@ -19,7 +19,6 @@
   "license": "ISC",
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
     "cheerio": "^1.2.0",
     "cors": "^2.8.5",
@@ -29,8 +28,7 @@
     "google-auth-library": "^9.0.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.0",
-    "mysql2": "^3.10.0",
-    "node-fetch": "^3.3.2"
+    "mysql2": "^3.10.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

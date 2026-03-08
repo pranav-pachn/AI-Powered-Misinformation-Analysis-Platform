@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 const GOOGLE_FACT_CHECK_API_KEY = process.env.GOOGLE_FACT_CHECK_API_KEY;
 const FACT_CHECK_TIMEOUT = 5000; // 5 seconds timeout
 
@@ -14,19 +12,34 @@ export async function searchFactChecks(query) {
   }
 
   try {
-    const response = await axios.get(
-      'https://factchecktools.googleapis.com/v1alpha1/claims:search',
-      {
-        params: {
-          query: query.substring(0, 255), // API limit is 255 chars
-          languageCode: 'en-US',
-          key: GOOGLE_FACT_CHECK_API_KEY,
-        },
-        timeout: FACT_CHECK_TIMEOUT,
-      }
-    );
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FACT_CHECK_TIMEOUT);
+    let claims = [];
 
-    const claims = response.data.claims || [];
+    try {
+      const params = new URLSearchParams({
+        query: query.substring(0, 255), // API limit is 255 chars
+        languageCode: 'en-US',
+        key: GOOGLE_FACT_CHECK_API_KEY,
+      });
+
+      const response = await fetch(
+        `https://factchecktools.googleapis.com/v1alpha1/claims:search?${params.toString()}`,
+        {
+          method: 'GET',
+          signal: controller.signal,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Fact-check API request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      claims = data.claims || [];
+    } finally {
+      clearTimeout(timeout);
+    }
     
     if (claims.length === 0) {
       return {
@@ -49,7 +62,7 @@ export async function searchFactChecks(query) {
     };
   } catch (error) {
     // Log but don't fail - fact-check is supplementary
-    if (error.code !== 'ECONNABORTED') {
+    if (error.name !== 'AbortError') {
       console.warn('Fact-check API error:', error.message);
     }
     return {
