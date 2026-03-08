@@ -1,4 +1,10 @@
-# AI Fact Checker - React Frontend
+# AI-Powered Misinformation Analysis Platform
+
+Tech Stack: React, Node.js, MySQL, Gemini API, Chart.js.
+
+This project focuses on explainable AI and real-world usability, allowing users to verify both raw text and live news URLs.
+
+## AI Fact Checker - React Frontend
 
 Modern, responsive React frontend for the AI-Powered Fake News Detection System built with Vite, React Router, and Tailwind CSS.
 
@@ -261,4 +267,4 @@ For issues, questions, or suggestions, please reach out to the development team.
 
 ---
 
-**Built with ❤️ for accurate information detection**
+Built with accurate information detection in mind.
