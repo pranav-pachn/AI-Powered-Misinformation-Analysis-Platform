@@ -13,9 +13,21 @@ dotenv.config();
 
 const app = express();
 
-// CORS configuration for production
+const allowedOrigins = (process.env.CORS_ORIGIN || '')
+	.split(',')
+	.map((origin) => origin.trim())
+	.filter(Boolean);
+
+// CORS configuration for production and local development
 const corsOptions = {
-	origin: process.env.CORS_ORIGIN || '*',
+	origin(origin, callback) {
+		if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+			callback(null, true);
+			return;
+		}
+
+		callback(new Error('Not allowed by CORS'));
+	},
 	credentials: true,
 	optionsSuccessStatus: 200,
 };

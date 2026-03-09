@@ -40,10 +40,7 @@ services:
       - key: GOOGLE_FACT_CHECK_API_KEY
         sync: false
       - key: CORS_ORIGIN
-        fromService:
-          type: web
-          name: fake-news-detection-client
-          property: host
+        value: https://fake-news-detection-client.onrender.com
 
   # Frontend Static Site
   - type: web
@@ -62,10 +59,7 @@ services:
         value: nosniff
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: fake-news-detection-api
-          property: host
+        value: https://fake-news-detection-api.onrender.com/api
 
 databases:
   - name: fake-news-db
