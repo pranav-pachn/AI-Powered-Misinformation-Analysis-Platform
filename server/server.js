@@ -13,7 +13,14 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+// CORS configuration for production
+const corsOptions = {
+	origin: process.env.CORS_ORIGIN || '*',
+	credentials: true,
+	optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '1mb' }));
 app.use(morgan('combined'));
 
@@ -25,6 +32,16 @@ const limiter = rateLimit({
 });
 
 app.use(limiter);
+
+// Root route for quick service verification
+app.get('/', (req, res) => {
+	res.send('Fake News Detection API is running');
+});
+
+// Health check endpoint for Render
+app.get('/health', (req, res) => {
+	res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // Public routes
 app.use('/api/auth', authRoutes);
@@ -40,6 +57,6 @@ app.use(errorHandler);
 
 const port = process.env.PORT || 5000;
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
 	console.log(`Server running on port ${port}`);
 });

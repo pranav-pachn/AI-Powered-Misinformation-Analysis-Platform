@@ -1,0 +1,75 @@
+services:
+  # Backend API Service
+  - type: web
+    name: fake-news-detection-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DB_HOST
+        fromDatabase:
+          name: fake-news-db
+          property: host
+      - key: DB_USER
+        fromDatabase:
+          name: fake-news-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: fake-news-db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: fake-news-db
+          property: database
+      - key: DB_SSL
+        value: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_FACT_CHECK_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        fromService:
+          type: web
+          name: fake-news-detection-client
+          property: host
+
+  # Frontend Static Site
+  - type: web
+    name: fake-news-detection-client
+    runtime: static
+    region: oregon
+    buildCommand: cd client && npm install && npm run build
+    staticPublishPath: ./client/dist
+    pullRequestPreviewsEnabled: true
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: fake-news-detection-api
+          property: host
+
+databases:
+  - name: fake-news-db
+    databaseName: fake_news_detection
+    user: fake_news_user
+    region: oregon
+    plan: free
