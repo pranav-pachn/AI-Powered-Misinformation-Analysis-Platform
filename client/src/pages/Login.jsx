@@ -1,9 +1,17 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { BiLogIn, BiEnvelope, BiLock, BiCheckCircle, BiShield, BiLink, BiLoaderAlt } from 'react-icons/bi';
+import { Layers } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useUser } from '../context/UserContext';
 import { useToast } from '../context/ToastContext';
+import api from '../services/api';
+
+const FEATURES = [
+  { icon: BiCheckCircle, color: 'text-[#6366f1]', bg: 'bg-[#6366f1]/10', title: 'Claim Extraction',  desc: 'Automatically identify and analyze key claims' },
+  { icon: BiShield,      color: 'text-[#22c55e]', bg: 'bg-[#22c55e]/10', title: 'Bias Detection',    desc: 'Detect political, cultural, and contextual biases' },
+  { icon: BiLink,        color: 'text-sky-400',   bg: 'bg-sky-400/10',   title: 'URL Verification',  desc: 'Real-time verification of article sources' },
+];
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -18,21 +26,11 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
-      }
-
+      const response = await api.post('/auth/login', { email, password });
+      const data = response.data;
       login(data.user, data.token);
       showToast('Login successful!');
-      navigate('/');
+      navigate('/app');
     } catch (error) {
       showToast(error.message, 'error');
     } finally {
@@ -43,22 +41,11 @@ export default function Login() {
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       setLoading(true);
-
-      const response = await fetch('http://localhost:5000/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential: credentialResponse.credential }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Google login failed');
-      }
-
+      const response = await api.post('/auth/google', { credential: credentialResponse.credential });
+      const data = response.data;
       login(data.user, data.token);
       showToast('Logged in with Google!');
-      navigate('/');
+      navigate('/app');
     } catch (error) {
       showToast(error.message, 'error');
     } finally {
@@ -67,251 +54,161 @@ export default function Login() {
   };
 
   return (
-    <div className="page-transition min-h-screen bg-[#0f172a] overflow-hidden relative">
-      {/* Animated Background Gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#0f172a] via-[#1a1f3a] to-[#0f172a] opacity-60"></div>
-      <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-l from-indigo-600/5 to-transparent rounded-full blur-3xl"></div>
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-r from-indigo-600/5 to-transparent rounded-full blur-3xl"></div>
+    <div className="page-transition min-h-screen bg-[#020617] overflow-hidden relative">
+      <div className="absolute inset-0 bg-gradient-to-br from-[#020617] via-[#0d1526] to-[#020617]" />
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#6366f1]/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[#6366f1]/5 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Content Container */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center px-4 py-8 lg:py-12">
+      <div className="relative z-10 min-h-screen flex items-center justify-center px-4 py-12 lg:py-16">
         <div className="w-full max-w-7xl">
-          {/* Header Logo - Mobile Only */}
-          <div className="lg:hidden text-center mb-12 animate-fade-in">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <div className="p-2.5 bg-gradient-to-br from-[#6366f1] to-indigo-600 rounded-lg shadow-lg shadow-indigo-600/20">
-                <BiCheckCircle className="text-white text-2xl" />
+
+          {/* Mobile header */}
+          <div className="lg:hidden text-center mb-10">
+            <div className="flex items-center justify-center gap-2.5 mb-3">
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg overflow-hidden shrink-0">
+                <img src="/favicon.png" alt="FactLens AI" className="w-full h-full object-cover" />
               </div>
-              <h1 className="text-2xl font-bold text-slate-100">AI Fact Checker</h1>
+              <span className="font-semibold text-white text-lg">FactLens AI</span>
             </div>
+            <p className="text-sm text-slate-400">See the truth behind the headlines.</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-12 items-center">
-            
-            {/* LEFT COLUMN - BRANDING PANEL (Desktop Only) */}
-            <div className="hidden lg:flex flex-col justify-center animate-fade-in opacity-0" style={{animationDelay: '0.1s', animation: 'fadeInUp 0.8s ease-out 0.1s forwards'}}>
-              {/* Premium Branding Section */}
-              <div className="relative">
-                {/* Glassmorphism Background */}
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-800/10 to-indigo-600/5 rounded-3xl blur-2xl opacity-50"></div>
-                
-                <div className="relative p-8 lg:p-0 lg:pb-12">
-                  {/* App Logo & Title */}
-                  <div className="flex items-start gap-4 mb-8">
-                    <div className="p-4 bg-gradient-to-br from-[#6366f1] to-indigo-600 rounded-2xl shadow-2xl shadow-indigo-600/30 flex-shrink-0">
-                      <BiCheckCircle className="text-white text-3xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+
+            {/* ── LEFT — Branding panel ── */}
+            <div className="hidden lg:flex flex-col justify-center">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="flex items-center justify-center w-10 h-10 rounded-xl overflow-hidden shrink-0">
+                  <img src="/favicon.png" alt="FactLens AI" className="w-full h-full object-cover" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white leading-none">FactLens AI</h2>
+                  <p className="text-[#6366f1] text-xs font-semibold uppercase tracking-widest mt-0.5">Intelligent Verification</p>
+                </div>
+              </div>
+
+              <h3 className="text-3xl lg:text-4xl font-black text-white leading-tight mb-4">
+                AI-Powered Misinformation<br />Analysis
+              </h3>
+              <p className="text-slate-400 text-base mb-10 leading-relaxed max-w-md">
+                Claim-level verification, bias detection, and explainable AI insights — all in seconds.
+              </p>
+
+              <div className="space-y-3 mb-10">
+                {FEATURES.map(({ icon: Icon, color, bg, title, desc }) => (
+                  <div key={title} className="flex items-start gap-4 p-4 rounded-xl bg-white/[0.03] border border-white/5 hover:border-[#6366f1]/20 transition-all duration-300">
+                    <div className={`p-2.5 rounded-lg ${bg} flex-shrink-0`}>
+                      <Icon className={`text-lg ${color}`} />
                     </div>
                     <div>
-                      <h2 className="text-3xl lg:text-4xl font-black bg-gradient-to-r from-slate-100 via-indigo-200 to-indigo-400 bg-clip-text text-transparent leading-tight mb-2">
-                        AI Fact Checker
-                      </h2>
-                      <p className="text-indigo-400 font-bold text-sm tracking-widest uppercase">Intelligent Verification</p>
+                      <p className="font-semibold text-slate-100 text-sm">{title}</p>
+                      <p className="text-slate-500 text-xs mt-0.5 leading-relaxed">{desc}</p>
                     </div>
                   </div>
+                ))}
+              </div>
 
-                  {/* Main Headline */}
-                  <h3 className="text-2xl lg:text-3xl font-bold text-slate-100 mb-4 leading-snug">
-                    AI-Powered Misinformation Analysis
-                  </h3>
-
-                  {/* Description */}
-                  <p className="text-slate-300 text-lg mb-12 leading-relaxed max-w-lg">
-                    Claim-level verification, bias detection, and explainable AI insights.
-                  </p>
-
-                  {/* Feature Bullets */}
-                  <div className="space-y-4 mb-12">
-                    {/* Feature 1 */}
-                    <div className="group flex items-start gap-4 p-4 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 border border-slate-700/30 hover:border-indigo-500/50 transition-all duration-300 backdrop-blur-sm">
-                      <div className="p-3 bg-gradient-to-br from-indigo-600/30 to-indigo-500/10 rounded-lg flex-shrink-0 group-hover:from-indigo-600/40 group-hover:to-indigo-500/20 transition-all duration-300">
-                        <BiCheckCircle className="text-indigo-300 text-xl" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-100 text-sm">Claim Extraction</p>
-                        <p className="text-slate-400 text-xs mt-0.5">Automatically identify and analyze key claims</p>
-                      </div>
-                    </div>
-
-                    {/* Feature 2 */}
-                    <div className="group flex items-start gap-4 p-4 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 border border-slate-700/30 hover:border-indigo-500/50 transition-all duration-300 backdrop-blur-sm">
-                      <div className="p-3 bg-gradient-to-br from-indigo-600/30 to-indigo-500/10 rounded-lg flex-shrink-0 group-hover:from-indigo-600/40 group-hover:to-indigo-500/20 transition-all duration-300">
-                        <BiShield className="text-indigo-300 text-xl" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-100 text-sm">Bias Detection</p>
-                        <p className="text-slate-400 text-xs mt-0.5">Detect political, cultural, and contextual biases</p>
-                      </div>
-                    </div>
-
-                    {/* Feature 3 */}
-                    <div className="group flex items-start gap-4 p-4 rounded-xl bg-slate-800/20 hover:bg-slate-800/40 border border-slate-700/30 hover:border-indigo-500/50 transition-all duration-300 backdrop-blur-sm">
-                      <div className="p-3 bg-gradient-to-br from-indigo-600/30 to-indigo-500/10 rounded-lg flex-shrink-0 group-hover:from-indigo-600/40 group-hover:to-indigo-500/20 transition-all duration-300">
-                        <BiLink className="text-indigo-300 text-xl" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-100 text-sm">URL Verification</p>
-                        <p className="text-slate-400 text-xs mt-0.5">Real-time verification of article sources</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Trust Badge */}
-                  <div className="pt-8 border-t border-slate-700/50">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-2 h-2 rounded-full bg-indigo-400"></div>
-                      <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">Enterprise Grade</p>
-                    </div>
-                    <p className="text-slate-300 font-medium text-sm">Trusted by thousands of fact-checkers worldwide</p>
-                  </div>
+              <div className="flex items-center gap-2 pt-6 border-t border-white/5">
+                <div className="flex -space-x-2">
+                  {['#6366f1','#22c55e','#38bdf8'].map((c) => (
+                    <div key={c} className="w-7 h-7 rounded-full border-2 border-[#020617]" style={{ background: c }} />
+                  ))}
                 </div>
+                <p className="text-slate-400 text-xs ml-1">Trusted by 50,000+ fact-checkers worldwide</p>
               </div>
             </div>
 
-            {/* RIGHT COLUMN - LOGIN CARD */}
-            <div className="animate-fade-in opacity-0" style={{animationDelay: '0.2s', animation: 'fadeInUp 0.8s ease-out 0.2s forwards'}}>
-              {/* Premium Login Card */}
-              <div className="relative group">
-                {/* Gradient Border Effect */}
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-600/20 to-indigo-400/10 rounded-2xl blur opacity-75 group-hover:opacity-100 transition duration-500 lg:opacity-0"></div>
+            {/* ── RIGHT — Login card ── */}
+            <div>
+              <div className="bg-[#0d1526]/80 backdrop-blur-xl border border-white/8 rounded-2xl shadow-2xl shadow-[#6366f1]/5 p-8 lg:p-10">
 
-                {/* Main Card */}
-                <div className="relative bg-[#1e293b]/90 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl shadow-indigo-600/10 p-8 lg:p-10">
-                  
-                  {/* Card Header */}
-                  <div className="mb-8">
-                    <h2 className="text-3xl font-bold text-slate-100 mb-2">Welcome Back</h2>
-                    <p className="text-slate-400 text-sm">Sign in to access your fact-checking dashboard</p>
+                <div className="mb-8">
+                  <h2 className="text-2xl font-bold text-white mb-1">Welcome back</h2>
+                  <p className="text-slate-400 text-sm">Sign in to your fact-checking dashboard</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="group">
+                    <label htmlFor="login-email" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 group-focus-within:text-[#6366f1] transition-colors">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-600 group-focus-within:text-[#6366f1] transition-colors">
+                        <BiEnvelope className="text-lg" />
+                      </div>
+                      <input
+                        id="login-email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@company.com"
+                        required
+                        className="w-full pl-10 pr-4 py-3 bg-white/[0.04] border border-white/8 hover:border-white/15 focus:border-[#6366f1]/60 focus:bg-white/[0.06] rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#6366f1]/30 transition-all duration-200 text-sm"
+                      />
+                    </div>
                   </div>
 
-                  {/* Login Form */}
-                  <form onSubmit={handleSubmit} className="space-y-5">
-                    {/* Email Field */}
-                    <div className="group">
-                      <label className="block text-sm font-semibold text-slate-300 mb-2.5 group-focus-within:text-indigo-400 transition-colors">
-                        Email Address
+                  <div className="group">
+                    <div className="flex items-center justify-between mb-2">
+                      <label htmlFor="login-password" className="block text-xs font-semibold uppercase tracking-wider text-slate-400 group-focus-within:text-[#6366f1] transition-colors">
+                        Password
                       </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-indigo-400 transition-colors">
-                          <BiEnvelope className="text-lg" />
-                        </div>
-                        <input
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="you@company.com"
-                          required
-                          className="w-full pl-12 pr-4 py-3.5 bg-slate-800/40 border border-slate-700/60 hover:border-slate-600/60 focus:border-indigo-500 focus:bg-slate-800/60 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-300"
-                        />
-                      </div>
+                      <Link to="#" className="text-xs text-[#6366f1] hover:text-indigo-300 font-medium transition-colors">Forgot?</Link>
                     </div>
-
-                    {/* Password Field */}
-                    <div className="group">
-                      <div className="flex items-center justify-between mb-2.5">
-                        <label className="block text-sm font-semibold text-slate-300 group-focus-within:text-indigo-400 transition-colors">
-                          Password
-                        </label>
-                        <Link
-                          to="#"
-                          className="text-xs text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
-                        >
-                          Forgot?
-                        </Link>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-600 group-focus-within:text-[#6366f1] transition-colors">
+                        <BiLock className="text-lg" />
                       </div>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-indigo-400 transition-colors">
-                          <BiLock className="text-lg" />
-                        </div>
-                        <input
-                          type="password"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="••••••••"
-                          required
-                          className="w-full pl-12 pr-4 py-3.5 bg-slate-800/40 border border-slate-700/60 hover:border-slate-600/60 focus:border-indigo-500 focus:bg-slate-800/60 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all duration-300"
-                        />
-                      </div>
+                      <input
+                        id="login-password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        required
+                        className="w-full pl-10 pr-4 py-3 bg-white/[0.04] border border-white/8 hover:border-white/15 focus:border-[#6366f1]/60 focus:bg-white/[0.06] rounded-xl text-slate-100 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-[#6366f1]/30 transition-all duration-200 text-sm"
+                      />
                     </div>
-
-                    {/* Sign In Button */}
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className={`w-full py-3.5 mt-8 bg-gradient-to-r from-[#6366f1] to-indigo-600 hover:from-[#6366f1]/95 hover:to-indigo-600/95 text-white font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2.5 shadow-lg shadow-indigo-600/30 hover:shadow-xl hover:shadow-indigo-600/40 ${
-                        loading ? 'opacity-90' : 'hover:scale-[1.02] active:scale-[0.98]'
-                      } disabled:opacity-70 disabled:cursor-not-allowed`}
-                    >
-                      {loading ? (
-                        <>
-                          <BiLoaderAlt className="text-lg animate-spin" />
-                          <span>Signing in...</span>
-                        </>
-                      ) : (
-                        <>
-                          <BiLogIn className="text-lg" />
-                          <span>Sign In</span>
-                        </>
-                      )}
-                    </button>
-
-                    {/* Trust Text */}
-                    <p className="text-xs text-slate-500 text-center mt-4">
-                      🔒 Secure authentication. Your data is encrypted and protected.
-                    </p>
-                  </form>
-
-                  {/* Divider */}
-                  <div className="flex items-center gap-3 my-7">
-                    <span className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-700/50 to-transparent"></span>
-                    <span className="text-xs text-slate-500 uppercase tracking-widest font-semibold">Or continue with</span>
-                    <span className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-700/50 to-transparent"></span>
                   </div>
 
-                  {/* Google Login */}
-                  <div className="flex justify-center mb-8">
-                    <GoogleLogin
-                      onSuccess={handleGoogleSuccess}
-                      onError={() => showToast('Google login failed', 'error')}
-                      theme="outline"
-                      shape="pill"
-                      width="100%"
-                    />
-                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3.5 mt-2 rounded-xl font-bold text-sm tracking-wide text-white bg-[#6366f1] hover:bg-[#5254cc] active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-[#6366f1]/20"
+                  >
+                    {loading
+                      ? <><BiLoaderAlt className="animate-spin text-lg" /> Signing in...</>
+                      : <><BiLogIn className="text-lg" /> Sign In</>}
+                  </button>
+                </form>
 
-                  {/* Sign Up Link */}
-                  <p className="text-center text-slate-400 text-sm">
-                    Don't have an account?{' '}
-                    <Link
-                      to="/signup"
-                      className="text-indigo-400 hover:text-indigo-300 font-semibold transition-colors hover:underline"
-                    >
-                      Create account
-                    </Link>
-                  </p>
+                <div className="flex items-center gap-3 my-6">
+                  <span className="h-px flex-1 bg-white/6" />
+                  <span className="text-xs text-slate-600 uppercase tracking-widest">Or continue with</span>
+                  <span className="h-px flex-1 bg-white/6" />
                 </div>
+
+                <div className="flex justify-center mb-7">
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={() => showToast('Google login failed', 'error')}
+                    theme="filled_black"
+                    shape="pill"
+                    width="320"
+                  />
+                </div>
+
+                <p className="text-center text-slate-500 text-sm">
+                  Don't have an account?{' '}
+                  <Link to="/signup" className="text-[#6366f1] hover:text-indigo-300 font-semibold transition-colors">Create account</Link>
+                </p>
               </div>
             </div>
+
           </div>
         </div>
       </div>
-
-      {/* CSS Animations */}
-      <style>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .animate-fade-in {
-          animation: fadeInUp 0.8s ease-out forwards;
-        }
-      `}</style>
     </div>
   );
 }
+

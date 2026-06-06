@@ -76,6 +76,9 @@ npm install
 cp .env.example .env
 ```
 
+For deployment, set `VITE_API_BASE_URL` to your Render backend URL, for example `https://your-backend.onrender.com/api`.
+If you use Render for the backend and Vercel for the frontend, set `CORS_ORIGIN` on Render to your Vercel URL and add the `client/vercel.json` rewrite so SPA routes load correctly.
+
 4. **Start development server**
 ```bash
 npm run dev
@@ -110,7 +113,12 @@ The app will open at `http://localhost:5173`
 
 ## 🔌 API Integration
 
-The frontend communicates with the backend API at `http://localhost:5000/api`
+The frontend communicates with the backend API through `VITE_API_BASE_URL`, which defaults to `http://localhost:5000/api` in local development.
+
+For production use:
+
+- Frontend on Vercel: add a rewrite so React Router routes like `/login` and `/dashboard` resolve to `index.html`.
+- Backend on Render: set `CORS_ORIGIN` to your Vercel deployment URL, such as `https://your-frontend.vercel.app`.
 
 ### Available Endpoints
 

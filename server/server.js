@@ -17,16 +17,28 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 	.split(',')
 	.map((origin) => origin.trim())
 	.filter(Boolean);
+const isDevelopment = process.env.NODE_ENV !== 'production';
+const localhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 // CORS configuration for production and local development
 const corsOptions = {
 	origin(origin, callback) {
-		if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+		if (!origin) {
 			callback(null, true);
 			return;
 		}
 
-		callback(new Error('Not allowed by CORS'));
+		if (allowedOrigins.includes(origin)) {
+			callback(null, true);
+			return;
+		}
+
+		if (isDevelopment && localhostOriginPattern.test(origin)) {
+			callback(null, true);
+			return;
+		}
+
+		callback(new Error(`Not allowed by CORS: ${origin}`));
 	},
 	credentials: true,
 	optionsSuccessStatus: 200,

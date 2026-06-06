@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { BiPulse, BiBarChartSquare, BiLineChart, BiPieChartAlt } from 'react-icons/bi';
+import { BiPulse, BiBarChartSquare, BiLineChart, BiPieChartAlt, BiTargetLock, BiData } from 'react-icons/bi';
 import { getAnalytics } from '../services/api';
 import Loader from '../components/Loader';
-import { useScrollReveal } from '../hooks/useScrollReveal';
+import { motion } from 'framer-motion';
 import {
   Chart as ChartJS,
   ArcElement,
@@ -13,6 +13,7 @@ import {
   Tooltip,
   Legend,
   PointElement,
+  Filler
 } from 'chart.js';
 import { Pie, Bar, Line } from 'react-chartjs-2';
 
@@ -25,15 +26,36 @@ ChartJS.register(
   Tooltip,
   Legend,
   PointElement,
+  Filler
 );
+
+// Custom Chart Tooltip plugin config
+const chartOptions = {
+  plugins: {
+    legend: {
+      labels: { color: 'rgba(255, 255, 255, 0.6)', font: { family: 'Inter', size: 11 } },
+      position: 'bottom',
+    },
+    tooltip: {
+      backgroundColor: 'rgba(15, 23, 42, 0.9)',
+      titleColor: '#fff',
+      bodyColor: 'rgba(255, 255, 255, 0.8)',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      borderWidth: 1,
+      padding: 12,
+      cornerRadius: 8,
+      displayColors: true,
+      titleFont: { family: 'Inter', size: 13, weight: 'bold' },
+      bodyFont: { family: 'Inter', size: 12 },
+    }
+  },
+  maintainAspectRatio: false,
+};
 
 export default function DashboardPage() {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  // Scroll reveal effect
-  useScrollReveal('.scroll-reveal');
 
   useEffect(() => {
     async function loadAnalytics() {
@@ -54,7 +76,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0f172a] pt-24 flex items-center justify-center">
+      <div className="min-h-screen bg-background border-t border-white/5 pt-24 pb-16 flex items-center justify-center">
         <Loader />
       </div>
     );
@@ -62,9 +84,11 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#0f172a] pt-24 flex items-center justify-center">
-        <div className="bg-[#1e293b] border border-red-500/40 rounded-xl p-6 text-red-200">
-          {error}
+      <div className="min-h-screen bg-background pt-24 pb-16 flex items-center justify-center px-6">
+        <div className="glass-card max-w-lg p-8 border-danger/30 text-center">
+          <BiPulse className="mx-auto text-4xl text-danger mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">System Error</h2>
+          <p className="text-danger/80 text-sm">{error}</p>
         </div>
       </div>
     );
@@ -72,17 +96,23 @@ export default function DashboardPage() {
 
   if (!analytics) {
     return (
-      <div className="min-h-screen bg-[#0f172a] pt-24 pb-16 flex items-center justify-center px-4">
-        <div className="max-w-md text-center p-8 rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800/40 to-slate-900/40 shadow-xl">
-          <div className="text-6xl mb-4">📊</div>
-          <h2 className="text-2xl font-bold text-slate-100 mb-3">No Analyses Yet</h2>
-          <p className="text-slate-400 text-sm leading-relaxed mb-6">
-            Start by analyzing your first article to see detailed statistics, bias distribution, and trends on your dashboard.
-          </p>
-          <div className="pt-6 border-t border-slate-700/50">
-            <p className="text-xs text-slate-500">✨ Dashboard updates automatically as you analyze articles</p>
+      <div className="min-h-screen bg-background pt-24 pb-16 flex items-center justify-center px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md text-center glass-card p-10 border-white/10"
+        >
+          <div className="inline-block p-4 rounded-2xl bg-primary/10 mb-6">
+            <BiBarChartSquare className="text-4xl text-primary" />
           </div>
-        </div>
+          <h2 className="text-2xl font-bold text-white tracking-tight mb-3">No Telemetry Yet</h2>
+          <p className="text-text/60 text-sm leading-relaxed mb-8">
+            Start processing articles through the reasoning engine to populate your analytics dashboard with cognitive insights and trend data.
+          </p>
+          <div className="pt-6 border-t border-white/5">
+            <p className="text-xs text-text/40 tracking-wider uppercase font-medium">Dashboard updates in real-time</p>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -97,14 +127,14 @@ export default function DashboardPage() {
   } = analytics;
 
   const fakeRealData = {
-    labels: ['Fake', 'Real'],
+    labels: ['Manipulated', 'Authentic'],
     datasets: [
       {
-        label: 'Articles',
         data: [fake_count || 0, real_count || 0],
-        backgroundColor: ['#ef4444', '#22c55e'],
-        borderColor: ['#fecaca', '#bbf7d0'],
+        backgroundColor: ['rgba(239, 68, 68, 0.8)', 'rgba(34, 197, 94, 0.8)'],
+        borderColor: ['rgba(239, 68, 68, 1)', 'rgba(34, 197, 94, 1)'],
         borderWidth: 1,
+        hoverOffset: 4,
       },
     ],
   };
@@ -114,9 +144,12 @@ export default function DashboardPage() {
     labels: biasLabels,
     datasets: [
       {
-        label: 'Articles',
+        label: 'Processed Articles',
         data: biasLabels.map((label) => bias_distribution?.[label] || 0),
-        backgroundColor: ['#60a5fa', '#f97316', '#a855f7'],
+        backgroundColor: ['rgba(96, 165, 250, 0.8)', 'rgba(251, 146, 60, 0.8)', 'rgba(167, 139, 250, 0.8)'],
+        borderColor: ['rgba(96, 165, 250, 1)', 'rgba(251, 146, 60, 1)', 'rgba(167, 139, 250, 1)'],
+        borderWidth: 1,
+        borderRadius: 4,
       },
     ],
   };
@@ -126,175 +159,151 @@ export default function DashboardPage() {
     labels: trendLabels,
     datasets: [
       {
-        label: 'Articles per day',
+        label: 'Analysis Throughput',
         data: (daily_trend || []).map((item) => item.count),
         borderColor: '#6366f1',
-        backgroundColor: 'rgba(99, 102, 241, 0.25)',
-        tension: 0.3,
+        backgroundColor: 'rgba(99, 102, 241, 0.15)',
+        borderWidth: 2,
+        tension: 0.4,
         fill: true,
+        pointBackgroundColor: '#6366f1',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
       },
     ],
   };
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } }
+  };
+
   return (
-    <div className="page-transition min-h-screen bg-[#0f172a] pt-24 pb-16">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <header className="mb-12">
-          <div className="flex items-center gap-3 mb-3">
-            <BiPulse className="text-2xl text-[#22c55e]" />
-            <h1 className="text-3xl sm:text-4xl font-semibold text-slate-50">
-              Analytics Dashboard
+    <div className="min-h-screen bg-background text-text pt-24 pb-20 relative overflow-hidden flex flex-col">
+      {/* Background aesthetics */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <div className="absolute top-20 left-10 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px]" />
+        <div className="absolute bottom-10 right-10 w-[600px] h-[600px] bg-sky-500/5 rounded-full blur-[150px]" />
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.015] mix-blend-overlay"></div>
+      </div>
+
+      <main className="relative z-10 max-w-7xl mx-auto px-6 w-full flex-grow flex flex-col">
+        <header className="mb-12 border-b border-white/5 pb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="p-2 rounded-xl bg-primary/20 text-primary border border-primary/20">
+              <BiPulse className="text-2xl" />
+            </span>
+            <h1 className="text-3xl font-bold text-white tracking-tight">
+              Platform Analytics
             </h1>
           </div>
-          <p className="text-sm sm:text-base text-slate-400 max-w-2xl leading-relaxed">
-            Track how misinformation flows through your workspace with high-level stats, bias distribution, and daily detection trends. All insights update in real-time as you analyze articles.
+          <p className="text-text/60 max-w-3xl leading-relaxed font-light">
+            Monitor real-time cognitive processing metrics, track bias distributions, and analyze the flow of misinformation through your workspace. Telemetry updates automatically.
           </p>
         </header>
 
-        {/* Summary cards */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <div className="scroll-reveal rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-800/50 to-slate-900/40 p-6 shadow-lg shadow-slate-950/50 transition-all duration-300 hover:shadow-xl hover:shadow-slate-950/60 hover:-translate-y-1">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs uppercase tracking-wider font-medium text-slate-400">Total Articles</span>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-300 text-lg">
-                <BiBarChartSquare />
-              </span>
-            </div>
-            <p className="text-4xl font-bold text-slate-50">{total_articles || 0}</p>
-          </div>
+        <motion.div 
+          className="flex-grow flex flex-col"
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+        >
+          {/* Summary KPIs */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 w-full">
+            {[
+              { label: 'Total Scanned', value: total_articles || 0, icon: BiBarChartSquare, color: 'text-sky-400', bg: 'bg-sky-400/10' },
+              { label: 'High Risk Flags', value: fake_count || 0, icon: BiTargetLock, color: 'text-red-400', bg: 'bg-red-400/10' },
+              { label: 'Verified Authentic', value: real_count || 0, icon: BiPieChartAlt, color: 'text-green-400', bg: 'bg-green-400/10' },
+              { label: 'Contexts Extracted', value: url_based_count || 0, icon: BiData, color: 'text-purple-400', bg: 'bg-purple-400/10' },
+            ].map((stat, idx) => (
+              <motion.div key={idx} variants={itemVariants} className="glass-card p-6 flex items-center justify-between border-white/5 group hover:border-white/10 transition-colors">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-text/40 mb-2">{stat.label}</p>
+                  <p className="text-3xl font-bold text-white tracking-tight">{stat.value}</p>
+                </div>
+                <div className={`w-12 h-12 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center border border-white/5 group-hover:scale-110 transition-transform`}>
+                  <stat.icon className="text-2xl" />
+                </div>
+              </motion.div>
+            ))}
+          </section>
 
-          <div className="scroll-reveal rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-800/50 to-slate-900/40 p-6 shadow-lg shadow-slate-950/50 transition-all duration-300 hover:shadow-xl hover:shadow-slate-950/60 hover:-translate-y-1">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs uppercase tracking-wider font-medium text-slate-400">Fake Articles</span>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/20 text-red-300 text-lg">
-                <BiPieChartAlt />
-              </span>
-            </div>
-            <p className="text-4xl font-bold text-red-300">{fake_count || 0}</p>
-          </div>
+          {/* Core Analytics Grid */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 flex-grow">
+            
+            <motion.div variants={itemVariants} className="glass-card p-6 border-white/5 flex flex-col h-[400px]">
+              <div className="flex items-center gap-2 mb-6">
+                <span className="w-2 h-2 rounded-full bg-red-400" />
+                <h2 className="text-sm font-semibold text-white tracking-wide">Risk Distribution</h2>
+              </div>
+              <div className="flex-1 relative pb-2 min-h-[250px]">
+                <Pie data={fakeRealData} options={chartOptions} />
+              </div>
+            </motion.div>
 
-          <div className="scroll-reveal rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-800/50 to-slate-900/40 p-6 shadow-lg shadow-slate-950/50 transition-all duration-300 hover:shadow-xl hover:shadow-slate-950/60 hover:-translate-y-1">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs uppercase tracking-wider font-medium text-slate-400">Real Articles</span>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-300 text-lg">
-                <BiLineChart />
-              </span>
-            </div>
-            <p className="text-4xl font-bold text-emerald-300">{real_count || 0}</p>
-          </div>
+            <motion.div variants={itemVariants} className="glass-card p-6 border-white/5 lg:col-span-2 flex flex-col h-[400px]">
+              <div className="flex items-center gap-2 mb-6">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <h2 className="text-sm font-semibold text-white tracking-wide">Cognitive Bias Vector</h2>
+              </div>
+              <div className="flex-1 relative pb-2 min-h-[250px]">
+                <Bar
+                  data={biasData}
+                  options={{
+                    ...chartOptions,
+                    scales: {
+                      x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.4)', font: { family: 'Inter' } } },
+                      y: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { dash: [4, 4] }, ticks: { color: 'rgba(255,255,255,0.4)', font: { family: 'Inter' } } }
+                    }
+                  }}
+                />
+              </div>
+            </motion.div>
 
-          <div className="scroll-reveal rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-800/50 to-slate-900/40 p-6 shadow-lg shadow-slate-950/50 transition-all duration-300 hover:shadow-xl hover:shadow-slate-950/60 hover:-translate-y-1">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs uppercase tracking-wider font-medium text-slate-400">URL-Based Analyses</span>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/20 text-violet-300 text-lg">
-                <BiPulse />
-              </span>
-            </div>
-            <p className="text-4xl font-bold text-violet-300">{url_based_count || 0}</p>
-          </div>
-        </section>
+            <motion.div variants={itemVariants} className="glass-card p-6 border-white/5 lg:col-span-3 flex flex-col h-[400px]">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-primary" />
+                  <h2 className="text-sm font-semibold text-white tracking-wide">Throughput Telemetry</h2>
+                </div>
+                <span className="text-xs text-text/40 bg-black/20 px-3 py-1 rounded-full font-mono">
+                  {trendLabels.length > 0 ? `Latest: ${Math.max(...(daily_trend||[]).map(t=>t.count))} req/day` : 'Awaiting data...'}
+                </span>
+              </div>
 
-        {/* Charts */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-          <div className="scroll-reveal rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-800/50 to-slate-900/40 p-6 shadow-lg shadow-slate-950/50 transition-all duration-300 hover:shadow-xl hover:shadow-slate-950/60 hover:-translate-y-1">
-            <h2 className="text-sm font-semibold text-slate-200 mb-1 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-gradient-to-r from-red-400 to-emerald-400" />
-              Fake vs Real Distribution
-            </h2>
-            <p className="text-xs text-slate-500 mb-5">
-              {real_count && total_articles ? `Fake content comprises ${Math.round((fake_count / total_articles) * 100)}% of analyzed articles` : 'Analyze articles to see distribution'}
-            </p>
-            <div className="h-48">
-              <Pie
-                data={fakeRealData}
-                options={{
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: {
-                      labels: { color: '#cbd5f5' },
-                    },
-                  },
-                }}
-              />
-            </div>
-          </div>
+              {trendLabels.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center border border-white/5 rounded-xl bg-black/10">
+                  <p className="text-sm text-text/40 font-medium tracking-wide">Begin processing requests to generate telemetry</p>
+                </div>
+              ) : (
+                <div className="flex-1 relative pb-2 min-h-[250px]">
+                  <Line
+                    data={trendData}
+                    options={{
+                      ...chartOptions,
+                      scales: {
+                        x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.4)', font: { family: 'Inter' } } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { dash: [4, 4] }, ticks: { color: 'rgba(255,255,255,0.4)', font: { family: 'Inter' }, stepSize: 1 } }
+                      }
+                    }}
+                  />
+                </div>
+              )}
+            </motion.div>
+          </section>
 
-          <div className="scroll-reveal rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-800/50 to-slate-900/40 p-6 shadow-lg shadow-slate-950/50 transition-all duration-300 hover:shadow-xl hover:shadow-slate-950/60 hover:-translate-y-1">
-            <h2 className="text-sm font-semibold text-slate-200 mb-1 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-gradient-to-r from-sky-400 to-purple-400" />
-              Bias Distribution Analysis
-            </h2>
-            <p className="text-xs text-slate-500 mb-5">
-              {bias_distribution && bias_distribution['Right-Leaning'] ? `Right-leaning bias dominates ${Math.round((bias_distribution['Right-Leaning'] / total_articles) * 100)}% of content` : 'Analyze articles to see bias patterns'}
-            </p>
-            <div className="h-48">
-              <Bar
-                data={biasData}
-                options={{
-                  maintainAspectRatio: false,
-                  scales: {
-                    x: {
-                      ticks: { color: '#9ca3af' },
-                      grid: { color: 'rgba(55, 65, 81, 0.7)' },
-                    },
-                    y: {
-                      ticks: { color: '#9ca3af' },
-                      grid: { color: 'rgba(55, 65, 81, 0.7)' },
-                    },
-                  },
-                  plugins: {
-                    legend: {
-                      labels: { color: '#cbd5f5' },
-                    },
-                  },
-                }}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="scroll-reveal rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-800/50 to-slate-900/40 p-6 shadow-lg shadow-slate-950/50 transition-all duration-300 hover:shadow-xl hover:shadow-slate-950/60 hover:-translate-y-1">
-          <h2 className="text-sm font-semibold text-slate-200 mb-1 flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-gradient-to-r from-indigo-400 to-sky-400" />
-            Daily Analysis Trend
-          </h2>
-          <p className="text-xs text-slate-500 mb-5">
-            {trendLabels.length > 0 
-              ? `Peak activity on ${trendLabels[trendLabels.length - 1] || 'recent days'}`
-              : 'Run analyses to track daily trends'
-            }
-          </p>
-          {trendLabels.length === 0 ? (
-            <div className="h-64 flex items-center justify-center rounded-lg bg-slate-800/30 border border-slate-700/30">
-              <p className="text-sm text-slate-500 text-center">Begin analyzing articles to see your activity trends</p>
-            </div>
-          ) : (
-            <div className="h-64">
-              <Line
-                data={trendData}
-                options={{
-                  maintainAspectRatio: false,
-                  scales: {
-                    x: {
-                      ticks: { color: '#9ca3af' },
-                      grid: { color: 'rgba(55, 65, 81, 0.5)' },
-                    },
-                    y: {
-                      ticks: { color: '#9ca3af' },
-                      grid: { color: 'rgba(55, 65, 81, 0.5)' },
-                    },
-                  },
-                  plugins: {
-                    legend: {
-                      labels: { color: '#cbd5f5' },
-                    },
-                  },
-                }}
-              />
-            </div>
-          )}
-        </section>
-      </div>
+        </motion.div>
+      </main>
     </div>
   );
 }

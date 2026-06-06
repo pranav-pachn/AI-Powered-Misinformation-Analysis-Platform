@@ -7,6 +7,12 @@ export default {
   theme: {
     extend: {
       colors: {
+        background: '#020617',
+        primary: '#6366f1',
+        accent: '#22c55e',
+        danger: '#ef4444',
+        card: '#1e293b',
+        text: '#e2e8f0',
         slate: {
           950: '#0f172a',
         },
@@ -17,6 +23,9 @@ export default {
             color: '#e2e8f0',
           },
         },
+      },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
       },
       animation: {
         'fade-in': 'fadeIn 0.6s ease-out forwards',

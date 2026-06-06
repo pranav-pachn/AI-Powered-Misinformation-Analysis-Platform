@@ -1,6 +1,6 @@
 import { BiCheckCircle, BiXCircle, BiRefresh, BiSearch, BiX, BiExpand, BiError, BiLoader, BiTrash } from 'react-icons/bi';
 import { useState, useEffect } from 'react';
-import { getHistory, clearHistory, deleteArticle } from '../services/api';
+import api, { getHistory, clearHistory, deleteArticle } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import Loader from './Loader';
 import ClaimsAnalysis from './ClaimsAnalysis';
@@ -100,13 +100,9 @@ export default function HistoryTable() {
     const fetchArticleClaims = async () => {
       try {
         setLoadingClaims(true);
-        const token = localStorage.getItem('token');
-        const response = await fetch(`http://localhost:5000/api/article/${article.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await response.json();
-        if (response.ok && data.claims) {
-          setClaims(data.claims);
+        const response = await api.get(`/article/${article.id}`);
+        if (response.data.claims) {
+          setClaims(response.data.claims);
         }
       } catch (error) {
         console.error('Failed to fetch claims:', error);

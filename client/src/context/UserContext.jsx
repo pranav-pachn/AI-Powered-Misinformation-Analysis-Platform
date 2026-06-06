@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import api from '../services/api';
 
 const UserContext = createContext();
 
@@ -34,16 +35,14 @@ export function UserProvider({ children }) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-      const response = await fetch('http://localhost:5000/api/auth/verify', {
-        headers: { Authorization: `Bearer ${token}` },
+      const response = await api.get('/auth/verify', {
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
+      if (response.status >= 200 && response.status < 300) {
+        setUser(response.data.user);
       } else {
         localStorage.removeItem('token');
         setToken(null);
