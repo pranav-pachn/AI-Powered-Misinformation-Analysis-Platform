@@ -15,6 +15,9 @@ export default defineConfig({
     port: 5173,
     open: true,
     cors: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
   },
   build: {
     outDir: 'dist',
