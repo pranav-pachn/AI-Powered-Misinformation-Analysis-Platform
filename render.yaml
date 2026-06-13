@@ -35,7 +35,9 @@ services:
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: 7d
-      - key: GOOGLE_API_KEY
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
         sync: false
       - key: GOOGLE_FACT_CHECK_API_KEY
         sync: false

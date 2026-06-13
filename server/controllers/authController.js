@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { OAuth2Client } from 'google-auth-library';
-import pool from '../config/db.js';
+import { getCollection } from '../config/db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key_change_in_production';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -14,6 +14,14 @@ function validateEmail(email) {
 
 function validatePassword(password) {
   return password.length >= 6;
+}
+
+function serializeUser(user) {
+  return {
+    id: user._id.toString(),
+    username: user.username,
+    email: user.email,
+  };
 }
 
 export async function register(req, res, next) {
@@ -51,30 +59,28 @@ export async function register(req, res, next) {
       throw error;
     }
 
-    // Check if user already exists
-    const [existingUsers] = await pool.execute(
-      'SELECT id FROM users WHERE email = ? OR username = ?',
-      [email, username]
-    );
+    const users = await getCollection('users');
+    const existingUser = await users.findOne({
+      $or: [{ email }, { username }],
+    });
 
-    if (existingUsers.length > 0) {
+    if (existingUser) {
       const error = new Error('Email or username already registered.');
       error.statusCode = 409;
       throw error;
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await users.insertOne({
+      username,
+      email,
+      password: hashedPassword,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
-    // Insert user
-    const [result] = await pool.execute(
-      'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-      [username, email, hashedPassword]
-    );
-
-    // Create JWT
     const token = jwt.sign(
-      { userId: result.insertId, username, email },
+      { userId: result.insertedId.toString(), username, email },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -82,7 +88,7 @@ export async function register(req, res, next) {
     res.status(201).json({
       message: 'User registered successfully.',
       token,
-      user: { id: result.insertId, username, email },
+      user: { id: result.insertedId.toString(), username, email },
     });
   } catch (error) {
     next(error);
@@ -100,22 +106,16 @@ export async function login(req, res, next) {
       throw error;
     }
 
-    // Find user
-    const [users] = await pool.execute(
-      'SELECT id, username, email, password FROM users WHERE email = ?',
-      [email]
-    );
+    const users = await getCollection('users');
+    const user = await users.findOne({ email });
 
-    if (users.length === 0) {
+    if (!user) {
       const error = new Error('Invalid email or password.');
       error.statusCode = 401;
       throw error;
     }
 
-    const user = users[0];
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(password, user.password || '');
 
     if (!isPasswordValid) {
       const error = new Error('Invalid email or password.');
@@ -123,9 +123,8 @@ export async function login(req, res, next) {
       throw error;
     }
 
-    // Create JWT
     const token = jwt.sign(
-      { userId: user.id, username: user.username, email: user.email },
+      { userId: user._id.toString(), username: user.username, email: user.email },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -133,7 +132,7 @@ export async function login(req, res, next) {
     res.json({
       message: 'Login successful.',
       token,
-      user: { id: user.id, username: user.username, email: user.email },
+      user: serializeUser(user),
     });
   } catch (error) {
     next(error);
@@ -170,9 +169,9 @@ export async function googleLogin(req, res, next) {
     }
 
     if (!googleClient || !GOOGLE_CLIENT_ID) {
-      const error = new Error('Google login is not configured on the server.');
-      error.statusCode = 500;
-      throw error;
+      return res.status(503).json({
+        message: 'Google login is not configured on the server.',
+      });
     }
 
     const ticket = await googleClient.verifyIdToken({
@@ -191,15 +190,10 @@ export async function googleLogin(req, res, next) {
       throw error;
     }
 
-    // Find or create user
-    const [users] = await pool.execute(
-      'SELECT id, username, email FROM users WHERE email = ?',
-      [email]
-    );
+    const users = await getCollection('users');
+    let user = await users.findOne({ email });
 
-    let user;
-
-    if (users.length === 0) {
+    if (!user) {
       let username = name;
       if (username.length < 3) {
         username = email.split('@')[0];
@@ -210,18 +204,23 @@ export async function googleLogin(req, res, next) {
 
       const passwordHash = await bcrypt.hash(googleId + JWT_SECRET, 10);
 
-      const [result] = await pool.execute(
-        'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-        [username, email, passwordHash]
-      );
+      const result = await users.insertOne({
+        username,
+        email,
+        password: passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
 
-      user = { id: result.insertId, username, email };
-    } else {
-      user = users[0];
+      user = {
+        _id: result.insertedId,
+        username,
+        email,
+      };
     }
 
     const token = jwt.sign(
-      { userId: user.id, username: user.username, email: user.email },
+      { userId: user._id.toString(), username: user.username, email: user.email },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -229,7 +228,7 @@ export async function googleLogin(req, res, next) {
     res.json({
       message: 'Login with Google successful.',
       token,
-      user: { id: user.id, username: user.username, email: user.email },
+      user: serializeUser(user),
     });
   } catch (error) {
     next(error);

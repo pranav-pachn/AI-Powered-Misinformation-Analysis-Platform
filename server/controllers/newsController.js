@@ -1,4 +1,4 @@
-import pool from '../config/db.js';
+import { ObjectId, getCollection } from '../config/db.js';
 import { analyzeNews } from '../services/aiService.js';
 import {
   validateAndNormalizeUrl,
@@ -7,6 +7,25 @@ import {
   extractArticleText,
 } from '../services/urlExtractService.js';
 import { checkMultipleClaims, analyzeCredibility } from '../services/factCheckService.js';
+
+function toObjectId(id, label = 'id') {
+  if (!ObjectId.isValid(id)) {
+    const error = new Error(`${label} is invalid.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return new ObjectId(id);
+}
+
+async function getCollections() {
+  return {
+    users: await getCollection('users'),
+    news: await getCollection('news'),
+    claims: await getCollection('claims'),
+    sentenceAnalysis: await getCollection('sentence_analysis'),
+  };
+}
 
 function validateText(text) {
   if (typeof text !== 'string' || !text.trim()) {
@@ -19,18 +38,19 @@ function validateText(text) {
 export async function predictNews(req, res, next) {
   try {
     const { text } = req.body;
-    const userId = req.user.userId;
     validateText(text);
 
-    // Verify user exists
-    const [userRows] = await pool.execute('SELECT id FROM users WHERE id = ?', [userId]);
-    if (userRows.length === 0) {
+    const userId = req.user.userId;
+    const userObjectId = toObjectId(userId, 'userId');
+    const { users, news } = await getCollections();
+
+    const user = await users.findOne({ _id: userObjectId });
+    if (!user) {
       const error = new Error('User not found.');
       error.statusCode = 404;
       throw error;
     }
 
-    // Analyze article with advanced AI response
     const aiResult = await analyzeNews(text);
 
     const {
@@ -54,26 +74,22 @@ export async function predictNews(req, res, next) {
     const emotionalTone =
       typeof bias.emotional_tone === 'string' ? bias.emotional_tone : null;
 
-    // Insert into news table
-    const insertNewsSql = `
-      INSERT INTO news (user_id, content, source_url, overall_result, overall_confidence, bias_type, bias_score, emotional_tone)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    const newsValues = [
-      userId,
-      text,
-      null,
-      overall_result,
-      overall_confidence,
+    const newsDoc = {
+      userId: userObjectId,
+      content: text,
+      sourceUrl: null,
+      overallResult: overall_result,
+      overallConfidence: overall_confidence,
       biasType,
       biasScore,
       emotionalTone,
-    ];
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
-    const [newsResult] = await pool.execute(insertNewsSql, newsValues);
-    const newsId = newsResult.insertId;
+    const newsResult = await news.insertOne(newsDoc);
+    const newsId = newsResult.insertedId;
 
-    // Insert claims and sentence-level analysis
     await insertClaimsAndSentences(newsId, claims, sentence_analysis);
 
     // Perform real-time fact-checking on claims (non-blocking)
@@ -91,7 +107,7 @@ export async function predictNews(req, res, next) {
     }
 
     res.json({
-      news_id: newsId,
+      news_id: newsId.toString(),
       content: text,
       overall_result,
       overall_confidence,
@@ -114,11 +130,9 @@ export async function predictNews(req, res, next) {
 }
 
 async function insertClaimsAndSentences(newsId, claims, sentence_analysis) {
-  // Insert claims
-  if (Array.isArray(claims) && claims.length > 0) {
-    const insertClaimSql =
-      'INSERT INTO claims (news_id, claim_text, explanation, verdict, confidence) VALUES (?, ?, ?, ?, ?)';
+  const { claims: claimsCollection, sentenceAnalysis } = await getCollections();
 
+  if (Array.isArray(claims) && claims.length > 0) {
     for (const claim of claims) {
       const claimText =
         typeof claim.claim_text === 'string'
@@ -138,15 +152,19 @@ async function insertClaimsAndSentences(newsId, claims, sentence_analysis) {
 
       if (!claimText || !verdict || claimConfidence === null) continue;
 
-      await pool.execute(insertClaimSql, [newsId, claimText, explanation, verdict, claimConfidence]);
+      await claimsCollection.insertOne({
+        newsId,
+        claimText,
+        explanation,
+        verdict,
+        confidence: claimConfidence,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
     }
   }
 
-  // Insert sentence-level analysis
   if (Array.isArray(sentence_analysis) && sentence_analysis.length > 0) {
-    const insertSentenceSql =
-      'INSERT INTO sentence_analysis (news_id, sentence_text, risk_level) VALUES (?, ?, ?)';
-
     for (const item of sentence_analysis) {
       const sentenceText =
         typeof item.sentence_text === 'string' ? item.sentence_text : '';
@@ -155,7 +173,13 @@ async function insertClaimsAndSentences(newsId, claims, sentence_analysis) {
 
       if (!sentenceText || !riskLevel) continue;
 
-      await pool.execute(insertSentenceSql, [newsId, sentenceText, riskLevel]);
+      await sentenceAnalysis.insertOne({
+        newsId,
+        sentenceText,
+        riskLevel,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
     }
   }
 }
@@ -164,10 +188,11 @@ export async function predictNewsFromUrl(req, res, next) {
   try {
     const { url } = req.body;
     const userId = req.user.userId;
+    const userObjectId = toObjectId(userId, 'userId');
+    const { users, news } = await getCollections();
 
-    // Verify user exists
-    const [userRows] = await pool.execute('SELECT id FROM users WHERE id = ?', [userId]);
-    if (userRows.length === 0) {
+    const user = await users.findOne({ _id: userObjectId });
+    if (!user) {
       const error = new Error('User not found.');
       error.statusCode = 404;
       throw error;
@@ -201,23 +226,21 @@ export async function predictNewsFromUrl(req, res, next) {
     const emotionalTone =
       typeof bias.emotional_tone === 'string' ? bias.emotional_tone : null;
 
-    const insertNewsSql = `
-      INSERT INTO news (user_id, content, source_url, overall_result, overall_confidence, bias_type, bias_score, emotional_tone)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    const newsValues = [
-      userId,
-      extractedText,
-      normalizedUrl,
-      overall_result,
-      overall_confidence,
+    const newsDoc = {
+      userId: userObjectId,
+      content: extractedText,
+      sourceUrl: normalizedUrl,
+      overallResult: overall_result,
+      overallConfidence: overall_confidence,
       biasType,
       biasScore,
       emotionalTone,
-    ];
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
-    const [newsResult] = await pool.execute(insertNewsSql, newsValues);
-    const newsId = newsResult.insertId;
+    const newsResult = await news.insertOne(newsDoc);
+    const newsId = newsResult.insertedId;
 
     await insertClaimsAndSentences(newsId, claims, sentence_analysis);
 
@@ -236,7 +259,7 @@ export async function predictNewsFromUrl(req, res, next) {
     }
 
     res.json({
-      news_id: newsId,
+      news_id: newsId.toString(),
       content: extractedText,
       source_url: normalizedUrl,
       overall_result,
@@ -260,24 +283,26 @@ export async function predictNewsFromUrl(req, res, next) {
 
 export async function getHistory(req, res, next) {
   try {
-    const userId = req.user.userId;
-    const query = `
-      SELECT
-        id,
-        content,
-        source_url,
-        overall_result AS result,
-        overall_confidence AS confidence,
-        bias_type,
-        bias_score,
-        emotional_tone,
-        created_at
-      FROM news
-      WHERE user_id = ?
-      ORDER BY created_at DESC
-    `;
-    const [rows] = await pool.execute(query, [userId]);
-    res.json(rows);
+    const userObjectId = toObjectId(req.user.userId, 'userId');
+    const { news } = await getCollections();
+
+    const rows = await news
+      .find({ userId: userObjectId })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.json(rows.map((row) => ({
+      id: row._id.toString(),
+      text: row.content,
+      content: row.content,
+      source_url: row.sourceUrl,
+      result: row.overallResult,
+      confidence: row.overallConfidence,
+      bias_type: row.biasType,
+      bias_score: row.biasScore,
+      emotional_tone: row.emotionalTone,
+      created_at: row.createdAt,
+    })));
   } catch (error) {
     next(error);
   }
@@ -286,62 +311,41 @@ export async function getHistory(req, res, next) {
 export async function getArticleWithClaims(req, res, next) {
   try {
     const { articleId } = req.params;
-    const userId = req.user.userId;
+    const userObjectId = toObjectId(req.user.userId, 'userId');
+    const newsObjectId = toObjectId(articleId, 'articleId');
+    const { news, claims, sentenceAnalysis } = await getCollections();
 
-    // Get article
-    const articleQuery = `
-      SELECT
-        id,
-        content,
-        source_url,
-        overall_result AS result,
-        overall_confidence AS confidence,
-        bias_type,
-        bias_score,
-        emotional_tone,
-        created_at
-      FROM news
-      WHERE id = ? AND user_id = ?
-    `;
-    const [articles] = await pool.execute(articleQuery, [articleId, userId]);
+    const article = await news.findOne({ _id: newsObjectId, userId: userObjectId });
 
-    if (articles.length === 0) {
+    if (!article) {
       const error = new Error('Article not found.');
       error.statusCode = 404;
       throw error;
     }
 
-    const article = articles[0];
-
-    // Get claims
-    const claimsQuery = `
-      SELECT claim_text, explanation, verdict, confidence
-      FROM claims
-      WHERE news_id = ?
-      ORDER BY created_at ASC
-    `;
-    const [claims] = await pool.execute(claimsQuery, [articleId]);
-
-    // Get sentence-level analysis
-    const sentenceQuery = `
-      SELECT sentence_text, risk_level
-      FROM sentence_analysis
-      WHERE news_id = ?
-      ORDER BY created_at ASC
-    `;
-    const [sentences] = await pool.execute(sentenceQuery, [articleId]);
+    const claimRows = await claims.find({ newsId: newsObjectId }).sort({ createdAt: 1 }).toArray();
+    const sentenceRows = await sentenceAnalysis.find({ newsId: newsObjectId }).sort({ createdAt: 1 }).toArray();
 
     res.json({
-      ...article,
-      claims: claims.map((c) => ({
-        claim_text: c.claim_text,
-        explanation: c.explanation,
-        verdict: c.verdict,
-        confidence: c.confidence,
+      id: article._id.toString(),
+      content: article.content,
+      text: article.content,
+      source_url: article.sourceUrl,
+      result: article.overallResult,
+      confidence: article.overallConfidence,
+      bias_type: article.biasType,
+      bias_score: article.biasScore,
+      emotional_tone: article.emotionalTone,
+      created_at: article.createdAt,
+      claims: claimRows.map((claim) => ({
+        claim_text: claim.claimText,
+        explanation: claim.explanation,
+        verdict: claim.verdict,
+        confidence: claim.confidence,
       })),
-      sentence_analysis: sentences.map((s) => ({
-        sentence_text: s.sentence_text,
-        risk_level: s.risk_level,
+      sentence_analysis: sentenceRows.map((sentence) => ({
+        sentence_text: sentence.sentenceText,
+        risk_level: sentence.riskLevel,
       })),
     });
   } catch (error) {
@@ -351,40 +355,18 @@ export async function getArticleWithClaims(req, res, next) {
 
 export async function getAnalytics(req, res, next) {
   try {
-    const userId = req.user.userId;
+    const userObjectId = toObjectId(req.user.userId, 'userId');
+    const { news } = await getCollections();
 
-    // Total articles and Fake/Real counts
-    const [resultCounts] = await pool.execute(
-      `
-      SELECT
-        COUNT(*) AS total,
-        SUM(CASE WHEN overall_result = 'Fake' THEN 1 ELSE 0 END) AS fake_count,
-        SUM(CASE WHEN overall_result = 'Real' THEN 1 ELSE 0 END) AS real_count,
-        SUM(CASE WHEN source_url IS NOT NULL THEN 1 ELSE 0 END) AS url_based_count
-      FROM news
-      WHERE user_id = ?
-    `,
-      [userId],
-    );
+    const totalArticles = await news.countDocuments({ userId: userObjectId });
+    const fakeCount = await news.countDocuments({ userId: userObjectId, overallResult: 'Fake' });
+    const realCount = await news.countDocuments({ userId: userObjectId, overallResult: 'Real' });
+    const urlBasedCount = await news.countDocuments({ userId: userObjectId, sourceUrl: { $ne: null } });
 
-    const countsRow = resultCounts[0] || {
-      total: 0,
-      fake_count: 0,
-      real_count: 0,
-      url_based_count: 0,
-    };
-
-    // Bias distribution
-    const [biasRows] = await pool.execute(
-      `
-      SELECT bias_type, COUNT(*) AS count
-      FROM news
-      WHERE user_id = ?
-        AND bias_type IS NOT NULL
-      GROUP BY bias_type
-    `,
-      [userId],
-    );
+    const biasAggregation = await news.aggregate([
+      { $match: { userId: userObjectId, biasType: { $ne: null } } },
+      { $group: { _id: '$biasType', count: { $sum: 1 } } },
+    ]).toArray();
 
     const biasDistribution = {
       'Left-Leaning': 0,
@@ -392,35 +374,33 @@ export async function getAnalytics(req, res, next) {
       Neutral: 0,
     };
 
-    for (const row of biasRows) {
-      if (!row.bias_type) continue;
-      if (biasDistribution[row.bias_type] !== undefined) {
-        biasDistribution[row.bias_type] = row.count;
+    for (const row of biasAggregation) {
+      if (row._id && biasDistribution[row._id] !== undefined) {
+        biasDistribution[row._id] = row.count;
       }
     }
 
-    // Daily trend
-    const [trendRows] = await pool.execute(
-      `
-      SELECT DATE(created_at) AS date, COUNT(*) AS count
-      FROM news
-      WHERE user_id = ?
-      GROUP BY DATE(created_at)
-      ORDER BY DATE(created_at)
-    `,
-      [userId],
-    );
+    const trendRows = await news.aggregate([
+      { $match: { userId: userObjectId } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]).toArray();
 
     const dailyTrend = trendRows.map((row) => ({
-      date: row.date,
+      date: row._id,
       count: row.count,
     }));
 
     res.json({
-      total_articles: countsRow.total,
-      fake_count: countsRow.fake_count,
-      real_count: countsRow.real_count,
-      url_based_count: countsRow.url_based_count || 0,
+      total_articles: totalArticles,
+      fake_count: fakeCount,
+      real_count: realCount,
+      url_based_count: urlBasedCount,
       bias_distribution: biasDistribution,
       daily_trend: dailyTrend,
     });
@@ -431,23 +411,26 @@ export async function getAnalytics(req, res, next) {
 
 export async function clearHistory(req, res, next) {
   try {
-    const userId = req.user.userId;
+    const userObjectId = toObjectId(req.user.userId, 'userId');
+    const { news, claims, sentenceAnalysis } = await getCollections();
 
-    // Verify user exists
-    const [userRows] = await pool.execute('SELECT id FROM users WHERE id = ?', [userId]);
-    if (userRows.length === 0) {
-      const error = new Error('User not found.');
-      error.statusCode = 404;
-      throw error;
+    const newsIds = await news.find({ userId: userObjectId }).project({ _id: 1 }).toArray();
+    const newsObjectIds = newsIds.map((row) => row._id);
+
+    if (newsObjectIds.length === 0) {
+      res.json({ message: 'History cleared successfully.', deleted_count: 0 });
+      return;
     }
 
-    // Delete all news records for the user (cascades to claims and sentence_analysis)
-    const deleteQuery = 'DELETE FROM news WHERE user_id = ?';
-    const [result] = await pool.execute(deleteQuery, [userId]);
+    await Promise.all([
+      claims.deleteMany({ newsId: { $in: newsObjectIds } }),
+      sentenceAnalysis.deleteMany({ newsId: { $in: newsObjectIds } }),
+      news.deleteMany({ userId: userObjectId }),
+    ]);
 
     res.json({
       message: 'History cleared successfully.',
-      deleted_count: result.affectedRows,
+      deleted_count: newsObjectIds.length,
     });
   } catch (error) {
     next(error);
@@ -457,23 +440,23 @@ export async function clearHistory(req, res, next) {
 export async function deleteArticle(req, res, next) {
   try {
     const { articleId } = req.params;
-    const userId = req.user.userId;
+    const userObjectId = toObjectId(req.user.userId, 'userId');
+    const newsObjectId = toObjectId(articleId, 'articleId');
+    const { news, claims, sentenceAnalysis } = await getCollections();
 
-    // Verify article exists and belongs to user
-    const [articles] = await pool.execute(
-      'SELECT id FROM news WHERE id = ? AND user_id = ?',
-      [articleId, userId]
-    );
+    const article = await news.findOne({ _id: newsObjectId, userId: userObjectId });
 
-    if (articles.length === 0) {
-      const error = new Error('Article not found or you do not have permission to delete it.');
+    if (!article) {
+      const error = new Error('Article not found.');
       error.statusCode = 404;
       throw error;
     }
 
-    // Delete the article (cascades to claims and sentence_analysis)
-    const deleteQuery = 'DELETE FROM news WHERE id = ? AND user_id = ?';
-    const [result] = await pool.execute(deleteQuery, [articleId, userId]);
+    await Promise.all([
+      claims.deleteMany({ newsId: newsObjectId }),
+      sentenceAnalysis.deleteMany({ newsId: newsObjectId }),
+      news.deleteOne({ _id: newsObjectId, userId: userObjectId }),
+    ]);
 
     res.json({
       message: 'Article deleted successfully.',

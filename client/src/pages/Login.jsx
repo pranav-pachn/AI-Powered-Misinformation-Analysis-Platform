@@ -14,6 +14,7 @@ const FEATURES = [
 ];
 
 export default function Login() {
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -188,15 +189,21 @@ export default function Login() {
                   <span className="h-px flex-1 bg-white/6" />
                 </div>
 
-                <div className="flex justify-center mb-7">
-                  <GoogleLogin
-                    onSuccess={handleGoogleSuccess}
-                    onError={() => showToast('Google login failed', 'error')}
-                    theme="filled_black"
-                    shape="pill"
-                    width="320"
-                  />
-                </div>
+                {googleClientId ? (
+                  <div className="flex justify-center mb-7">
+                    <GoogleLogin
+                      onSuccess={handleGoogleSuccess}
+                      onError={() => showToast('Google login failed', 'error')}
+                      theme="filled_black"
+                      shape="pill"
+                      width="320"
+                    />
+                  </div>
+                ) : (
+                  <div className="mb-7 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3 text-center text-xs text-slate-500">
+                    Google sign-in is disabled in this environment.
+                  </div>
+                )}
 
                 <p className="text-center text-slate-500 text-sm">
                   Don't have an account?{' '}

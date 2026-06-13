@@ -17,6 +17,7 @@ const FEATURES = [
 ];
 
 export default function Signup() {
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -139,16 +140,22 @@ export default function Signup() {
                 </div>
 
                 {/* Google sign-up — prominent at top */}
-                <div className="flex justify-center mb-5">
-                  <GoogleLogin
-                    onSuccess={handleGoogleSuccess}
-                    onError={() => showToast('Google sign-up failed', 'error')}
-                    theme="filled_black"
-                    shape="pill"
-                    width="320"
-                    text="signup_with"
-                  />
-                </div>
+                {googleClientId ? (
+                  <div className="flex justify-center mb-5">
+                    <GoogleLogin
+                      onSuccess={handleGoogleSuccess}
+                      onError={() => showToast('Google sign-up failed', 'error')}
+                      theme="filled_black"
+                      shape="pill"
+                      width="320"
+                      text="signup_with"
+                    />
+                  </div>
+                ) : (
+                  <div className="mb-5 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3 text-center text-xs text-slate-500">
+                    Google sign-up is disabled in this environment.
+                  </div>
+                )}
 
                 <div className="flex items-center gap-3 mb-5">
                   <span className="h-px flex-1 bg-white/6" />

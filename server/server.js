@@ -8,6 +8,7 @@ import authRoutes from './routes/authRoutes.js';
 import newsRoutes from './routes/newsRoutes.js';
 import { verifyAuth } from './middleware/authMiddleware.js';
 import errorHandler from './middleware/errorHandler.js';
+import { getMongoHealth, waitForConnection } from './config/db.js';
 
 dotenv.config();
 
@@ -63,8 +64,32 @@ app.get('/', (req, res) => {
 });
 
 // Health check endpoint for Render
-app.get('/health', (req, res) => {
-	res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+	const mongo = await getMongoHealth();
+	const openRouterConfigured = Boolean(
+		process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY
+	);
+	const groqConfigured = Boolean(process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY);
+	const geminiConfigured = Boolean(
+		process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+	);
+
+	res.status(200).json({
+		status: 'ok',
+		timestamp: new Date().toISOString(),
+		services: {
+			mongo,
+			ai: {
+				configured: openRouterConfigured || groqConfigured || geminiConfigured,
+				primary: openRouterConfigured ? 'openrouter' : groqConfigured ? 'groq' : geminiConfigured ? 'gemini' : null,
+				providers: {
+					openrouter: openRouterConfigured,
+					groq: groqConfigured,
+					gemini: geminiConfigured,
+				},
+			},
+		},
+	});
 });
 
 // Public routes
@@ -79,8 +104,30 @@ app.use((req, res) => {
 
 app.use(errorHandler);
 
-const port = process.env.PORT || 5000;
+const basePort = Number(process.env.PORT || 5000);
+const maxPortAttempts = Number(process.env.PORT_ATTEMPTS || 100);
 
-app.listen(port, '0.0.0.0', () => {
-	console.log(`Server running on port ${port}`);
-});
+async function startServer(port, attempt = 1) {
+	const server = app.listen(port, '0.0.0.0', () => {
+		console.log(`Server running on port ${port}`);
+	});
+
+	server.on('error', (error) => {
+		if (error.code === 'EADDRINUSE' && isDevelopment && attempt < maxPortAttempts) {
+			const nextPort = port + 1;
+			console.warn(`Port ${port} is in use, trying ${nextPort}...`);
+			server.close(() => startServer(nextPort, attempt + 1));
+			return;
+		}
+
+		console.error(`Failed to start server on port ${port}:`, error.message);
+		process.exit(1);
+	});
+
+	return server;
+}
+
+(async () => {
+	await waitForConnection();
+	startServer(basePort);
+})();

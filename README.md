@@ -1,6 +1,6 @@
 # AI-Powered Misinformation Analysis Platform
 
-Tech Stack: React, Node.js, MySQL, Gemini API, Chart.js.
+Tech Stack: React, Node.js, MongoDB, OpenRouter, Groq, Chart.js.
 
 This project focuses on explainable AI and real-world usability, allowing users to verify both raw text and live news URLs.
 
@@ -78,6 +78,8 @@ cp .env.example .env
 
 For deployment, set `VITE_API_BASE_URL` to your Render backend URL, for example `https://your-backend.onrender.com/api`.
 If you use Render for the backend and Vercel for the frontend, set `CORS_ORIGIN` on Render to your Vercel URL and add the `client/vercel.json` rewrite so SPA routes load correctly.
+
+For local backend development, copy `server/.env.example` to `server/.env` and set `MONGO_URI`, `MONGO_DB_NAME`, and `OPENROUTER_API_KEY` before running `npm run dev`. `GROQ_API_KEY` is supported as the next fallback provider.
 
 4. **Start development server**
 ```bash

@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
+import { getDb } from '../config/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,27 +10,17 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 async function applySchema() {
-  const { DB_HOST, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
+  const db = await getDb();
 
-  if (!DB_HOST || !DB_USER || !DB_NAME) {
-    throw new Error('Database configuration is missing. Check environment variables.');
-  }
+  await Promise.all([
+    db.collection('users').createIndex({ email: 1 }, { unique: true }),
+    db.collection('users').createIndex({ username: 1 }, { unique: true }),
+    db.collection('news').createIndex({ userId: 1, createdAt: -1 }),
+    db.collection('claims').createIndex({ newsId: 1, createdAt: 1 }),
+    db.collection('sentence_analysis').createIndex({ newsId: 1, createdAt: 1 }),
+  ]);
 
-  const schemaPath = path.resolve(__dirname, '../../database/schema.sql');
-  const schemaSql = await fs.readFile(schemaPath, 'utf-8');
-
-  const connection = await mysql.createConnection({
-    host: DB_HOST,
-    user: DB_USER,
-    password: DB_PASSWORD,
-    database: DB_NAME,
-    multipleStatements: true,
-  });
-
-  await connection.query(schemaSql);
-  await connection.end();
-
-  console.log('Schema applied successfully.');
+  console.log('MongoDB indexes ensured successfully.');
 }
 
 applySchema().catch((error) => {

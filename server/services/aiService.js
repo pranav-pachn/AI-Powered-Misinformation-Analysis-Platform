@@ -3,24 +3,22 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
-// Retry configuration
 const MAX_RETRIES = 3;
-const INITIAL_DELAY_MS = 1000; // 1 second
-const BACKOFF_MULTIPLIER = 2; // exponential backoff
+const INITIAL_DELAY_MS = 1000;
+const BACKOFF_MULTIPLIER = 2;
 
-// Get current date in readable format for AI context
 function getCurrentDateContext() {
   const now = new Date();
-  return `${now.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric'
+  return `${now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
   })} at ${now.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: true
+    hour12: true,
   })} UTC`;
 }
 
@@ -39,7 +37,7 @@ Your tasks for each article:
    - Right-Leaning
    - Neutral
 6. Provide a bias intensity score between 0 and 1 (0 = no bias, 1 = extremely biased).
-7. Extract 3–5 factual claims with verdicts and confidence scores.
+7. Extract 3-5 factual claims with verdicts and confidence scores.
 8. Perform sentence-level risk analysis across the article, classifying each notable sentence as:
    - SAFE
    - MISLEADING
@@ -85,60 +83,85 @@ You MUST respond with STRICT, VALID JSON ONLY in this exact structure (no commen
   ]
 }`;
 
-// Load API keys - supports both comma-separated and single key
-const apiKeysString = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
-
-if (!apiKeysString) {
-  throw new Error('GEMINI_API_KEYS or GEMINI_API_KEY is not set.');
+function parseApiKeys(...values) {
+  return values
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(','))
+    .map((key) => key.trim())
+    .filter((key) => key.length > 0);
 }
 
-// Parse API keys (comma-separated)
-const apiKeys = apiKeysString.split(',').map(key => key.trim()).filter(key => key.length > 0);
+const openRouterApiKeys = parseApiKeys(
+  process.env.OPENROUTER_API_KEYS,
+  process.env.OPENROUTER_API_KEY
+);
+const groqApiKeys = parseApiKeys(process.env.GROQ_API_KEYS, process.env.GROQ_API_KEY);
+const geminiApiKeys = parseApiKeys(
+  process.env.GEMINI_API_KEYS,
+  process.env.GEMINI_API_KEY,
+  process.env.GOOGLE_API_KEY
+);
 
-if (apiKeys.length === 0) {
-  throw new Error('No valid API keys found.');
+const openRouterModel = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct';
+const openRouterFallbackModel =
+  process.env.OPENROUTER_FALLBACK_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
+const groqModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const groqFallbackModel = process.env.GROQ_FALLBACK_MODEL || 'openai/gpt-oss-120b';
+const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const geminiFallbackModel = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-pro';
+
+const openRouterSiteUrl = process.env.OPENROUTER_SITE_URL || process.env.CLIENT_URL || 'http://localhost:5173';
+const openRouterAppName = process.env.OPENROUTER_APP_NAME || 'Fake News Detection';
+
+let geminiModelInstances = [];
+
+function ensureGeminiModelInstances() {
+  if (geminiModelInstances.length > 0) {
+    return geminiModelInstances;
+  }
+
+  if (geminiApiKeys.length === 0) {
+    return [];
+  }
+
+  geminiModelInstances = geminiApiKeys.map((apiKey) => {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    return {
+      primary: genAI.getGenerativeModel({
+        model: geminiModel,
+        systemInstruction: systemPrompt,
+        generationConfig: { temperature: 0.2 },
+      }),
+      fallback: genAI.getGenerativeModel({
+        model: geminiFallbackModel,
+        systemInstruction: systemPrompt,
+        generationConfig: { temperature: 0.2 },
+      }),
+    };
+  });
+
+  console.log(`Loaded ${geminiModelInstances.length} Gemini API key(s)`);
+  return geminiModelInstances;
 }
 
-console.log(`Loaded ${apiKeys.length} Gemini API key(s)`);
+function createUnavailableAiError() {
+  const error = new Error(
+    'AI analysis is not configured. Set OPENROUTER_API_KEY or GROQ_API_KEY in server/.env. Gemini keys are also supported as a legacy fallback.'
+  );
+  error.statusCode = 503;
+  return error;
+}
 
-// Default to Gemini 1.5 Flash; can be overridden via GEMINI_MODEL
-const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-const fallbackModelName = process.env.GEMINI_FALLBACK_MODEL || 'gemini-1.5-pro';
-
-// Create model instances for each API key
-const modelInstances = apiKeys.map(apiKey => {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  return {
-    apiKey: apiKey.substring(0, 10) + '...', // For logging purposes
-    primary: genAI.getGenerativeModel({
-      model: modelName,
-      systemInstruction: systemPrompt,
-      generationConfig: { temperature: 0.2 },
-    }),
-    fallback: genAI.getGenerativeModel({
-      model: fallbackModelName,
-      systemInstruction: systemPrompt,
-      generationConfig: { temperature: 0.2 },
-    }),
-  };
-});
-
-// Legacy references (use first key)
-const model = modelInstances[0].primary;
-const fallbackModel = modelInstances[0].fallback;
-
-// Helper function to sleep
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Helper function to retry API calls with exponential backoff
 async function retryWithBackoff(apiCall, operationName = 'API call') {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
       return await apiCall();
     } catch (err) {
-      const isServiceUnavailable = err.status === 503 || err.message?.includes('Service Unavailable');
+      const isServiceUnavailable = err.status === 503 || err.status >= 500;
       const isRateLimit = err.status === 429;
 
       if ((isServiceUnavailable || isRateLimit) && attempt < MAX_RETRIES) {
@@ -155,99 +178,222 @@ async function retryWithBackoff(apiCall, operationName = 'API call') {
   }
 }
 
-// Helper to attempt with multiple API keys, rotating when rate limited
-async function callAIModelWithRotation(text, operationName = 'API call', usePrimary = true) {
-  const exhaustedKeys = new Set();
-  
-  for (let keyIndex = 0; keyIndex < modelInstances.length; keyIndex++) {
-    const modelInstance = modelInstances[keyIndex];
-    const modelToUse = usePrimary ? modelInstance.primary : modelInstance.fallback;
-    const modelType = usePrimary ? 'primary' : 'fallback';
-    
-    if (exhaustedKeys.has(keyIndex)) {
-      continue;
-    }
-    
+function createHttpError(status, message, payload) {
+  const error = new Error(message);
+  error.status = status;
+  error.statusCode = status;
+  error.payload = payload;
+  return error;
+}
+
+async function parseErrorResponse(response) {
+  const rawText = await response.text();
+
+  try {
+    const payload = JSON.parse(rawText);
+    const message =
+      payload?.error?.message ||
+      payload?.message ||
+      payload?.detail ||
+      `Request failed with status ${response.status}`;
+    return createHttpError(response.status, message, payload);
+  } catch {
+    return createHttpError(
+      response.status,
+      rawText || `Request failed with status ${response.status}`,
+      null
+    );
+  }
+}
+
+function extractChatContent(payload) {
+  if (typeof payload?.choices?.[0]?.message?.content === 'string') {
+    return payload.choices[0].message.content;
+  }
+
+  if (Array.isArray(payload?.choices?.[0]?.message?.content)) {
+    return payload.choices[0].message.content
+      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('');
+  }
+
+  if (typeof payload?.choices?.[0]?.text === 'string') {
+    return payload.choices[0].text;
+  }
+
+  return '';
+}
+
+async function callOpenRouterChat(apiKey, model, userPrompt) {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': openRouterSiteUrl,
+      'X-Title': openRouterAppName,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.2,
+      max_tokens: 2200,
+    }),
+  });
+
+  if (!response.ok) {
+    throw await parseErrorResponse(response);
+  }
+
+  return response.json();
+}
+
+async function callGroqChat(apiKey, model, userPrompt) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.2,
+      max_tokens: 2200,
+    }),
+  });
+
+  if (!response.ok) {
+    throw await parseErrorResponse(response);
+  }
+
+  return response.json();
+}
+
+function shouldTryNextKey(err) {
+  return err.status === 401 || err.status === 402 || err.status === 403 || err.status === 429 || err.status >= 500;
+}
+
+function shouldTryFallbackModel(err) {
+  return (
+    err.status === 404 ||
+    err.status === 429 ||
+    err.status === 502 ||
+    err.status === 503 ||
+    err.status >= 500
+  );
+}
+
+async function callProviderWithRotation({
+  providerName,
+  apiKeys,
+  primaryModel,
+  fallbackModel,
+  callPrimary,
+  callFallback,
+}) {
+  if (apiKeys.length === 0) {
+    return null;
+  }
+
+  let lastError = null;
+
+  for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex++) {
+    const apiKey = apiKeys[keyIndex];
+
     try {
-      console.log(`${operationName} - Using API key ${keyIndex + 1}/${modelInstances.length} (${modelType} model)`);
-      
+      console.log(
+        `Analyze News - Using ${providerName} key ${keyIndex + 1}/${apiKeys.length} with model ${primaryModel}`
+      );
+
       return await retryWithBackoff(
-        () => modelToUse.generateContent(text),
-        `${operationName} [Key ${keyIndex + 1}]`
+        () => callPrimary(apiKey),
+        `Analyze News (${providerName} primary)`
+      );
+    } catch (primaryErr) {
+      lastError = primaryErr;
+
+      if (fallbackModel && shouldTryFallbackModel(primaryErr)) {
+        try {
+          console.warn(
+            `Analyze News - ${providerName} primary model failed (${primaryErr.status || 'unknown'}), trying fallback model ${fallbackModel}`
+          );
+
+          return await retryWithBackoff(
+            () => callFallback(apiKey),
+            `Analyze News (${providerName} fallback)`
+          );
+        } catch (fallbackErr) {
+          lastError = fallbackErr;
+        }
+      }
+
+      if (shouldTryNextKey(lastError) && keyIndex < apiKeys.length - 1) {
+        console.warn(
+          `Analyze News - ${providerName} key ${keyIndex + 1} failed (${lastError.status || 'unknown'}), trying next key...`
+        );
+        continue;
+      }
+
+      throw lastError;
+    }
+  }
+
+  throw lastError || new Error(`${providerName} request failed.`);
+}
+
+async function callGeminiWithRotation(userPrompt, usePrimary = true) {
+  const instances = ensureGeminiModelInstances();
+
+  if (instances.length === 0) {
+    return null;
+  }
+
+  let lastError = null;
+
+  for (let keyIndex = 0; keyIndex < instances.length; keyIndex++) {
+    const model = usePrimary ? instances[keyIndex].primary : instances[keyIndex].fallback;
+    const modelLabel = usePrimary ? geminiModel : geminiFallbackModel;
+
+    try {
+      console.log(
+        `Analyze News - Using Gemini key ${keyIndex + 1}/${instances.length} with model ${modelLabel}`
+      );
+      return await retryWithBackoff(
+        () => model.generateContent(userPrompt),
+        `Analyze News (Gemini ${usePrimary ? 'primary' : 'fallback'})`
       );
     } catch (err) {
-      const isRateLimit = err.status === 429;
-      const isServiceUnavailable = err.status === 503 || err.message?.includes('Service Unavailable');
-      
-      if (isRateLimit) {
-        console.warn(`${operationName} - API key ${keyIndex + 1} hit rate limit (429), trying next key...`);
-        exhaustedKeys.add(keyIndex);
-        
-        // Try next key if available
-        if (keyIndex < modelInstances.length - 1) {
-          continue;
-        }
-        
-        // All keys exhausted
-        console.error(`${operationName} - All ${modelInstances.length} API keys exhausted`);
-        throw err;
+      lastError = err;
+      if (shouldTryNextKey(err) && keyIndex < instances.length - 1) {
+        console.warn(
+          `Analyze News - Gemini key ${keyIndex + 1} failed (${err.status || 'unknown'}), trying next key...`
+        );
+        continue;
       }
-      
-      if (isServiceUnavailable) {
-        console.warn(`${operationName} - Service unavailable (503) with key ${keyIndex + 1}`);
-        exhaustedKeys.add(keyIndex);
-        
-        // Try next key if available
-        if (keyIndex < modelInstances.length - 1) {
-          continue;
-        }
-      }
-      
+
       throw err;
     }
   }
-  
-  throw new Error('All API keys exhausted or unavailable');
-}
 
-// Helper to attempt main model, fallback to secondary model if unavailable
-async function callAIModel(primaryModel, fallbackModelFn, text, operationName = 'API call') {
-  try {
-    return await retryWithBackoff(
-      () => primaryModel.generateContent(text),
-      `${operationName} (primary model)`
-    );
-  } catch (primaryErr) {
-    const isPrimaryUnavailable = primaryErr.status === 503 || primaryErr.message?.includes('Service Unavailable');
-
-    if (isPrimaryUnavailable) {
-      console.warn(`${operationName} - Primary model unavailable, attempting with fallback model...`);
-      try {
-        return await retryWithBackoff(
-          () => fallbackModelFn(),
-          `${operationName} (fallback model)`
-        );
-      } catch (fallbackErr) {
-        console.error(`${operationName} - Both primary and fallback models failed:`, fallbackErr);
-        throw fallbackErr;
-      }
-    }
-
-    throw primaryErr;
-  }
+  throw lastError || new Error('Gemini request failed.');
 }
 
 function extractJson(text) {
   if (!text || typeof text !== 'string') return null;
 
-  // Try strict parse first
   try {
-    const direct = JSON.parse(text);
-    return direct;
+    return JSON.parse(text);
   } catch {
-    // Fallback: extract first JSON object from content
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return null;
+
     try {
       return JSON.parse(match[0]);
     } catch {
@@ -280,7 +426,6 @@ function validateAnalysisResponse(payload) {
     throw error;
   }
 
-  // Overall result & confidence (support both old and new keys)
   const overallResultRaw = payload.overall_result ?? payload.result;
   const overallResult = normalizeResult(overallResultRaw);
 
@@ -304,7 +449,6 @@ function validateAnalysisResponse(payload) {
     throw error;
   }
 
-  // Bias section
   const biasPayload = payload.bias && typeof payload.bias === 'object' ? payload.bias : {};
   const biasType = normalizeBiasType(biasPayload.type);
   const biasScore =
@@ -316,7 +460,6 @@ function validateAnalysisResponse(payload) {
       ? biasPayload.emotional_tone.trim()
       : null;
 
-  // Normalize claims so the frontend can render consistently
   const claims = Array.isArray(payload.claims)
     ? payload.claims
         .map((claim) => {
@@ -329,7 +472,7 @@ function validateAnalysisResponse(payload) {
           const verdict = typeof claim?.verdict === 'string' ? claim.verdict.trim() : '';
           const confidenceRaw = Number(claim?.confidence);
           const confidence = Number.isNaN(confidenceRaw) ? null : Math.round(confidenceRaw);
-          const explanation =
+          const claimExplanation =
             typeof claim?.explanation === 'string' ? claim.explanation.trim() : '';
 
           if (!claimText || !verdict || confidence === null) return null;
@@ -338,11 +481,12 @@ function validateAnalysisResponse(payload) {
             claim_text: claimText,
             verdict,
             confidence: Math.min(Math.max(confidence, 0), 100),
-            explanation,
+            explanation: claimExplanation,
           };
         })
         .filter(Boolean)
     : [];
+
   const sentenceAnalysis = Array.isArray(payload.sentence_analysis)
     ? payload.sentence_analysis
     : [];
@@ -361,46 +505,104 @@ function validateAnalysisResponse(payload) {
   };
 }
 
-export async function analyzeNews(text) {
-  try {
-    const userPrompt = `Article to analyze:\n\n${text}`;
+function normalizeProviderError(err) {
+  let errorMessage = err.message || 'Failed to analyze news article. Please try again later.';
+  let statusCode = err.statusCode || err.status || 502;
 
-    // Try primary model with key rotation
-    let response;
+  if (err.status === 429) {
+    errorMessage = 'AI provider rate limit reached. Please try again in a few minutes or add additional API keys.';
+    statusCode = 429;
+  }
+
+  if (
+    err.status === 404 &&
+    (
+      err.message?.includes('not found for API version') ||
+      err.message?.toLowerCase().includes('model')
+    )
+  ) {
+    errorMessage =
+      'The configured AI model is not supported by the current provider. Update OPENROUTER_MODEL or GROQ_MODEL to a supported model.';
+    statusCode = 502;
+  }
+
+  const error = new Error(errorMessage);
+  error.statusCode = statusCode;
+  return error;
+}
+
+export async function analyzeNews(text) {
+  const hasAiProvider =
+    openRouterApiKeys.length > 0 || groqApiKeys.length > 0 || geminiApiKeys.length > 0;
+
+  if (!hasAiProvider) {
+    throw createUnavailableAiError();
+  }
+
+  const userPrompt = `Article to analyze:\n\n${text}`;
+
+  try {
+    let content = '';
+
     try {
-      response = await callAIModelWithRotation(userPrompt, 'Analyze News', true);
-    } catch (primaryErr) {
-      const isPrimaryUnavailable = primaryErr.status === 503 || primaryErr.message?.includes('Service Unavailable');
-      const allKeysExhausted = primaryErr.message?.includes('All API keys exhausted');
-      
-      // If primary model fails across all keys (but not rate limited), try fallback model
-      if (isPrimaryUnavailable && !allKeysExhausted) {
-        console.warn('All primary models unavailable, attempting fallback model with key rotation...');
-        response = await callAIModelWithRotation(userPrompt, 'Analyze News (Fallback)', false);
-      } else {
-        throw primaryErr;
+      const openRouterResponse = await callProviderWithRotation({
+        providerName: 'OpenRouter',
+        apiKeys: openRouterApiKeys,
+        primaryModel: openRouterModel,
+        fallbackModel: openRouterFallbackModel,
+        callPrimary: (apiKey) => callOpenRouterChat(apiKey, openRouterModel, userPrompt),
+        callFallback: (apiKey) => callOpenRouterChat(apiKey, openRouterFallbackModel, userPrompt),
+      });
+
+      if (openRouterResponse) {
+        content = extractChatContent(openRouterResponse);
+      }
+    } catch (openRouterErr) {
+      console.warn('OpenRouter analyzeNews failed, falling back:', openRouterErr.message);
+
+      try {
+        const groqResponse = await callProviderWithRotation({
+          providerName: 'Groq',
+          apiKeys: groqApiKeys,
+          primaryModel: groqModel,
+          fallbackModel: groqFallbackModel,
+          callPrimary: (apiKey) => callGroqChat(apiKey, groqModel, userPrompt),
+          callFallback: (apiKey) => callGroqChat(apiKey, groqFallbackModel, userPrompt),
+        });
+
+        if (groqResponse) {
+          content = extractChatContent(groqResponse);
+        }
+      } catch (groqErr) {
+        console.warn('Groq analyzeNews failed, falling back:', groqErr.message);
+
+        try {
+          const geminiPrimary = await callGeminiWithRotation(userPrompt, true);
+          if (geminiPrimary) {
+            content = geminiPrimary?.response?.text?.() || '';
+          }
+        } catch (geminiPrimaryErr) {
+          const canTryGeminiFallback =
+            geminiPrimaryErr.status === 404 ||
+            geminiPrimaryErr.status === 429 ||
+            geminiPrimaryErr.status === 503 ||
+            geminiPrimaryErr.message?.includes('Service Unavailable');
+
+          if (canTryGeminiFallback) {
+            const geminiFallback = await callGeminiWithRotation(userPrompt, false);
+            content = geminiFallback?.response?.text?.() || '';
+          } else {
+            throw geminiPrimaryErr;
+          }
+        }
       }
     }
 
-    const content = response?.response?.text?.() || '';
     const json = extractJson(content);
     const validated = validateAnalysisResponse(json);
-
     return validated;
   } catch (err) {
-    console.error('Gemini analyzeNews error:', err);
-
-    // Provide specific error messages based on the error type
-    let errorMessage = 'Failed to analyze news article. Please try again later.';
-    let statusCode = 502;
-    
-    if (err.status === 429 || err.message?.includes('All API keys exhausted')) {
-      errorMessage = `API rate limit reached. All ${modelInstances.length} API key(s) have been exhausted. Please try again in a few minutes or add more API keys.`;
-      statusCode = 429;
-    }
-
-    const error = new Error(errorMessage);
-    error.statusCode = statusCode;
-    throw error;
+    console.error('AI analyzeNews error:', err);
+    throw normalizeProviderError(err);
   }
 }
